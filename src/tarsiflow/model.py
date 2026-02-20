@@ -1,4 +1,5 @@
 import inspect
+import numpy as np
 from functools import wraps
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -40,7 +41,7 @@ class Field:
 
 def with_model_context(func):
     """
-    Decorator which enables the injection of the model context into a given computation.
+    Inject `model` context (state) into key-value arguments at runtime.
     """
     sig = inspect.signature(func)  
 
