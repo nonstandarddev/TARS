@@ -62,9 +62,16 @@ delta = model.refresh("quantity")
 ```
 
 Note that `delta` is a dictionary object that logs the key-value pairs for downstream outputs of the model
-that are dependent on `quantity` - you can imagine this package being incorporated into the backend
-of a web application where state is maintained on the backend and corresponding updates are 
-transmitted back and forth via *event* payloads.
+that are dependent on `quantity`. In this case it might look something like this,
+
+```
+{
+    "revenue": 1000
+}
+```
+
+You can imagine this package being incorporated into the backend of a web application where state is 
+maintained on the backend and corresponding updates are transmitted back and forth via *event* payloads.
 
 ## Applications
 
