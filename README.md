@@ -2,9 +2,7 @@
 
 ## Background
 
-TARS is the "Toolkit for Actuarial Runtime Systems". This repository 
-
-It is a declarative framework designed to create *efficient* computational models with inbuilt, dynamic
+`tarsiflow` is a declarative framework designed to create *efficient* computational models with inbuilt, dynamic
 *dependency resolution* at its core.
 
 ## Usage
