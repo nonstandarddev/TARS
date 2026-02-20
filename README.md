@@ -60,6 +60,9 @@ model.set("quantity", 10)
 model.refresh("quantity")
 ```
 
+By contrast, if I change `price` then both `revenue` and `tax` need to be recalculated which the
+model respects and understands by design.
+
 ## Applications
 
 This package could be combined with [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) 
