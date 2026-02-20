@@ -32,7 +32,7 @@ def compute_tax(
     rate: float,
     price: float
 ) -> float:
-return (rate * price)
+    return (rate * price)
 
 # Declaration of schema
 schema = [
