@@ -1,6 +1,9 @@
+import inspect
+import numpy as np
+from functools import wraps
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Any
 
 
 @dataclass
@@ -15,12 +18,91 @@ class TrackingState:
 class Field:
 
     name: str
-    value: any | None = None
+    value: Any | None = None
     compute: Callable | None = None
+
+    @property
+    def classification(self):
+        if isinstance(self.value, (list, np.ndarray)):
+            return "array"
+        else:
+            return "value"
+
+    def __repr__(self):
+        if self.classification == "array":
+            # Print only the shape/length, not full contents
+            try:
+                length = len(self.value)
+            except TypeError:
+                length = "?"
+            return f"<Array {self.name}, value length={length}>"
+        return f"<Field {self.name}, value={self.value}>"
+
+
+def with_model_context(func):
+    """
+    Decorator which enables the injection of the model context into a given computation.
+    """
+    sig = inspect.signature(func)  
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):  
+        model = kwargs.pop("model", None)  
+        if model is not None:
+            for name in sig.parameters:  
+                if name not in kwargs:
+                    kwargs[name] = model.get(name)
+        return func(*args, **kwargs)  
+    return wrapper  
+
+
+@with_model_context
+def compute_aal(
+    avg_severity,
+    avg_n_claims
+) -> float:
+    return avg_severity * avg_n_claims
+
+
+@with_model_context
+def compute_trial_losses(
+    avg_severity,
+    avg_n_claims,
+    n_trials
+) -> np.ndarray:
+    trial_frequencies = np.random.poisson(
+        lam=avg_n_claims,
+        size=n_trials
+    )
+    trial_losses = np.array([
+        np.random.exponential(scale=avg_severity, size=k).sum()
+        for k in trial_frequencies
+    ])
+    return trial_losses
 
 
 class Model:
+    """
+    Creates a 'model' for storing computational results and tracking computational dependencies.
 
+    Note:
+
+    * We invoke `defaultdict(list)` to create a dictionary of lists. This is used to track the 
+      reverse dependencies associated with each field. It might look something like this:
+
+      ```
+      [
+          ('avg_severity', ['aal', 'simulated_losses']), 
+          ('avg_n_claims', ['aal', 'simulated_losses'])
+          ...
+      ]
+      ```
+
+      So the input field `avg_severity` (which is decided by the client) is responsible for the
+      computation of the `aal` and `simulated_losses`. The same logic applies to `avg_n_claims`
+    * The `tracking_state` attribute is used to (temporarily) log which dependencies are relied
+      on in order to calculate each output field
+    """
     def __init__(self):
         self.fields = {}
         self.dependents = defaultdict(list)
@@ -50,7 +132,7 @@ class Model:
         self.tracking_state.current_field = field_name
 
         # Execute compute once to discover dependencies
-        value = field.compute(self)
+        value = field.compute(model=self)
 
         # Disable tracking
         self.tracking_state.active = False
@@ -71,18 +153,24 @@ class Model:
             if field.compute:
                 self._build_dependencies(name)
 
-    def refresh_dependents(self, input_field):
+    def refresh(self, field_name):
         delta = {}
-        queue = deque(self.dependents[input_field])
+        queue = deque(self.dependents[field_name])
 
         while queue:
             field_name = queue.popleft()
             field = self.fields[field_name]
 
             old_value = field.value
-            new_value = field.compute(self)
+            new_value = field.compute(model=self)
 
-            if new_value != old_value:
+            delta_condition = False
+            if field.classification == "array":
+                delta_condition = np.sum(old_value) != np.sum(new_value)
+            else:
+                delta_condition = (new_value != old_value)
+
+            if delta_condition:
                 field.value = new_value
                 delta[field_name] = new_value
                 queue.extend(self.dependents[field_name])
@@ -91,18 +179,22 @@ class Model:
     
 
 if __name__ == "__main__":
-    
-    def compute_aal(model: Model) -> float:
-        return model.get("avg_severity") * model.get("avg_n_claims")
-    
+
+    schema = [
+        Field("avg_severity", 500_000),
+        Field("avg_n_claims", 5),
+        Field("n_trials", 100_000),
+        Field("aal", compute=compute_aal),
+        Field("trial_losses", compute=compute_trial_losses)
+    ]
+
     model = Model()
 
-    model.register(Field("avg_severity", 500_000))
-    model.register(Field("avg_n_claims", 5))
-    model.register(Field("aal", compute=compute_aal))
+    for field in schema:
+        model.register(field)
 
     model.initialise()
 
     model.set("avg_severity", 400_000)
-    model.refresh_dependents(input_field="avg_severity")
+    model.refresh("avg_severity")
 
