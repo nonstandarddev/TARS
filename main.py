@@ -36,9 +36,7 @@ if __name__ == "__main__":
     schema = [
         Field("avg_severity", 500_000),
         Field("avg_n_claims", 5),
-        Field("n_trials", 100_000),
-        Field("aal", compute=compute_aal),
-        Field("trial_losses", compute=compute_trial_losses)
+        Field("aal", compute=compute_aal)
     ]
 
     model = Model()
@@ -48,6 +46,7 @@ if __name__ == "__main__":
 
     model.initialise()
 
-    model.set("avg_severity", 400_000)
-    model.refresh("avg_severity")
+    delta = model.refresh(input_name="avg_severity", input_value=400_000)
+
+    print(delta)
 

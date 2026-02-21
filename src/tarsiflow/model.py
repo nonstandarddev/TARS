@@ -2,41 +2,9 @@ import inspect
 import numpy as np
 from functools import wraps
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from typing import Callable, Any
-
-
-@dataclass
-class TrackingState:
-
-    active: bool = False
-    current_field: str | None = None
-    current_dependencies: set = field(default_factory=set)
-
-
-@dataclass
-class Field:
-
-    name: str
-    value: Any | None = None
-    compute: Callable | None = None
-
-    @property
-    def classification(self):
-        if isinstance(self.value, (list, np.ndarray)):
-            return "array"
-        else:
-            return "value"
-
-    def __repr__(self):
-        if self.classification == "array":
-            # Print only the shape/length, not full contents
-            try:
-                length = len(self.value)
-            except TypeError:
-                length = "?"
-            return f"<Array {self.name}, value length={length}>"
-        return f"<Field {self.name}, value={self.value}>"
+from typing import Any
+from .tracking import Tracking
+from .field import Field
 
 
 def with_model_context(func):
@@ -62,8 +30,8 @@ class Model:
 
     Note:
 
-    * We invoke `defaultdict(list)` to create a dictionary of lists. This is used to track the 
-      reverse dependencies associated with each field. It might look something like this:
+    * You may, at any time, access a log of all of the downstream dependencies associated with
+      each field by calling on `Model.dependents`,
 
       ```
       [
@@ -73,70 +41,105 @@ class Model:
       ]
       ```
 
-      So the input field `avg_severity` (which is decided by the client) is responsible for the
-      computation of the `aal` and `simulated_losses`. The same logic applies to `avg_n_claims`
-    * The `tracking_state` attribute is used to (temporarily) log which dependencies are relied
-      on in order to calculate each output field
+      In this instance, the input field `avg_severity` (which is decided by the client) is responsible 
+      for the computation of the `aal` and `simulated_losses`. The same logic applies to `avg_n_claims`
+    * In addition, a full list of fields registered to the model are available by calling on `Model.fields`
     """
     def __init__(self):
-        self.fields = {}
-        self.dependents = defaultdict(list)
-        self.tracking_state: TrackingState = TrackingState()
+        self._fields = {}
+        self._dependents = defaultdict(list)
+        self._tracking: Tracking = Tracking()
 
-    def register(self, field):
-        self.fields[field.name] = field
+    @property
+    def fields(self):
+        return self._fields
+    
+    @property
+    def dependents(self):
+        return self._dependents
+
+    def register(
+        self, 
+        field: Field
+    ) -> None:
+        """
+        Add a new field to the `model`
+        """
+        self._fields[field.name] = field
 
     def set(self, name, value):
-        field = self.fields[name]
+        """
+        Set the `value` of a given field (marked by `name`) in the model
+        """
+        field = self._fields[name]
         field.value = value
 
     def get(self, name):
-        field = self.fields[name]
-        if self.tracking_state.active:
-            self.tracking_state.current_dependencies.add(name)
+        """
+        Get the `value` of a given field (marked by `name`) in the model
+        """
+        field = self._fields[name]
+        tracking = self._tracking
+
+        if tracking.active:
+            tracking.add_dependency(name)
+            
         return field.value
 
     def _build_dependencies(self, field_name):
-        field = self.fields[field_name]
+        """
+        Build a dependency graph for a given `field_name`
+        """
+        field = self._fields[field_name]
+        tracking = self._tracking
 
         if not field.compute:
             return
 
         # Enable tracking
-        self.tracking_state.active = True
-        self.tracking_state.current_field = field_name
+        tracking.activate(field_name=field_name)
 
         # Execute compute once to discover dependencies
         value = field.compute(model=self)
-
-        # Disable tracking
-        self.tracking_state.active = False
 
         # Store value
         field.value = value
 
         # Register reverse dependencies
-        for dep in self.tracking_state.current_dependencies:
-            self.dependents[dep].append(field_name)
+        for dep in tracking.current_dependencies:
+            self._dependents[dep].append(field_name)
 
-        # Reset tracking state
-        self.tracking_state = TrackingState()
+        # Reset tracking
+        tracking.deactivate()
 
     def initialise(self):
-        
-        for name, field in self.fields.items():
+        """
+        Initialise the `model` post field registration - in particular, register the upstream 
+        (reverse) dependencies associated with every output field
+        """
+        for name, field in self._fields.items():
             if field.compute:
                 self._build_dependencies(name)
 
-    def refresh(self, field_name):
+    def refresh(self, input_name: str, input_value: Any) -> dict[str, Any]:
+        """
+        Refresh all downstream outputs in the `model` that are associated with the input 
+        specified by `input_name`
+
+        :param input_name: the name of the affected input field
+        :param input_value: the new value of the affected input field
+        :return: a dictionary object containing key-value pairs for 'modified' output fields
+        """
         delta = {}
-        queue = deque(self.dependents[field_name])
+        queue = deque(self._dependents[input_name])
 
         while queue:
             field_name = queue.popleft()
-            field = self.fields[field_name]
+            field = self._fields[field_name]
 
             old_value = field.value
+
+            self.set(input_name, input_value)
             new_value = field.compute(model=self)
 
             delta_condition = False
@@ -148,6 +151,6 @@ class Model:
             if delta_condition:
                 field.value = new_value
                 delta[field_name] = new_value
-                queue.extend(self.dependents[field_name])
+                queue.extend(self._dependents[field_name])
 
         return delta
