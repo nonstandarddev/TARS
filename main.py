@@ -29,6 +29,12 @@ def compute_trial_losses(
         for k in trial_frequencies
     ])
     return trial_losses
+
+
+@with_model_context
+def costly_operation():
+    import time
+    time.sleep(10)
     
 
 if __name__ == "__main__":
@@ -36,7 +42,8 @@ if __name__ == "__main__":
     schema = [
         Field("avg_severity", 500_000),
         Field("avg_n_claims", 5),
-        Field("aal", compute=compute_aal)
+        Field("aal", compute=compute_aal),
+        Field("costly_operation", compute=costly_operation)
     ]
 
     model = Model()
@@ -44,7 +51,12 @@ if __name__ == "__main__":
     for field in schema:
         model.register(field)
 
+    print("Initialising model...")
+
     model.initialise()
+
+
+    print("Refreshing average severity...")
 
     delta = model.refresh(input_name="avg_severity", input_value=400_000)
 

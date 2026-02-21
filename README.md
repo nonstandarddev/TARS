@@ -34,12 +34,18 @@ def compute_tax(
 ) -> float:
     return (rate * price)
 
+@with_model_context
+def costly_operation():
+    import time
+    time.sleep(10)
+
 # Declaration of schema
 schema = [
     Field("price", 100),
     Field("quantity", 5),
     Field("revenue", compute=compute_revenue),
-    Field("tax", compute=compute_tax)
+    Field("tax", compute=compute_tax),
+    Field("costly_operation", compute=costly_operation)
 ]
 
 # Model setup
@@ -47,17 +53,27 @@ model = Model()
 for field in schema:
     model.register(field)
 
-# Initialise dependencies and values (one-time operation)
+# Initialise dependencies and values (one-time operation) - this will initially compute all
+# outputs including the 'costly' delay of 10 seconds
 model.initialise()
 ```
 
-With this setup, the model 'knows' that `revenue` is dependent on `price` and `quantity`.
+With this setup, the model 'knows' that `revenue` is dependent on `price` and `quantity`,
+
+```python
+model.dependents
+
+# defaultdict(<class 'list'>, {'price': ['revenue', 'tax'], 'quantity': ['revenue'], 'rate': ['tax']})
+```
 
 So, if I change `quantity` *only* `revenue` needs to be recalculated (and we can ignore `tax`),
 
 ```python
 delta = model.refresh("quantity", 10)
 ```
+
+More crucially the `costly_operation` (which is programmed to take 10 seconds) is completely ignored
+as the input field that we modified (`quantity`) has nothing to do with its value.
 
 Note that `delta` is a dictionary object that logs the key-value pairs for downstream outputs of the model
 that are dependent on `quantity`. In this case it might look something like this,
