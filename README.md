@@ -56,9 +56,7 @@ With this setup, the model 'knows' that `revenue` is dependent on `price` and `q
 So, if I change `quantity` *only* `revenue` needs to be recalculated (and we can ignore `tax`),
 
 ```python
-model.set("quantity", 10)
-
-delta = model.refresh("quantity")
+delta = model.refresh("quantity", 10)
 ```
 
 Note that `delta` is a dictionary object that logs the key-value pairs for downstream outputs of the model
