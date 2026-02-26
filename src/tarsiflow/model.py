@@ -1,4 +1,5 @@
 import inspect
+import asyncio
 import numpy as np
 from functools import wraps
 from collections import defaultdict, deque
@@ -14,13 +15,21 @@ def with_model_context(func):
     sig = inspect.signature(func)  
 
     @wraps(func)
-    def wrapper(*args, **kwargs):  
+    def wrapper(*args, **kwargs): 
+        
         model = kwargs.pop("model", None)  
         if model is not None:
             for name in sig.parameters:  
                 if name not in kwargs:
                     kwargs[name] = model.get(name)
+
+        context = kwargs.pop("context", None)
+        if context is not None:
+            if context["from_task"]:
+                return context["sentinel"] 
+
         return func(*args, **kwargs)  
+    
     return wrapper  
 
 
@@ -64,6 +73,8 @@ class Model:
     ) -> None:
         """
         Add a new field to the `model`
+
+        :param field: a `Field` object to be registered to the model
         """
         self._fields[field.name] = field
 
@@ -93,14 +104,17 @@ class Model:
         field = self._fields[field_name]
         tracking = self._tracking
 
-        if not field.compute:
-            return
-
         # Enable tracking
         tracking.activate(field_name=field_name)
 
         # Execute compute once to discover dependencies
-        value = field.compute(model=self)
+        value = field.compute(
+            model=self, 
+            context={
+                "from_task": field.from_task, 
+                "sentinel": field.sentinel
+            }
+        )
 
         # Store value
         field.value = value
@@ -121,6 +135,35 @@ class Model:
             if field.compute:
                 self._build_dependencies(name)
 
+    async def refresh_task(self, output_name: str) -> dict[str, Any]:
+        """
+        Refresh a 'task output' field
+
+        :param output_name: the name of the task-driven output (this must have `Field.from_task == True`)
+        :return: a dictionary object containing key-value pairs for 'modified' output fields
+        """
+        delta = {}
+        field = self._fields[output_name]
+
+        if not field.from_task:
+            raise ValueError(f"Incorrect specification; '{output_name}' is not a task-driven field")
+        
+        new_value = await asyncio.to_thread(
+            field.compute,
+            model=self
+        )
+        field.value = new_value
+
+        delta[output_name] = new_value
+        delta.update(
+            self.refresh(
+                output_name,
+                new_value
+            )
+        )
+
+        return delta
+
     def refresh(self, input_name: str, input_value: Any) -> dict[str, Any]:
         """
         Refresh all downstream outputs in the `model` that are associated with the input 
@@ -136,6 +179,10 @@ class Model:
         while queue:
             field_name = queue.popleft()
             field = self._fields[field_name]
+
+            if field.from_task:
+                queue.extend(self._dependents[field_name])
+                continue
 
             old_value = field.value
 

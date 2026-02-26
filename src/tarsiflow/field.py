@@ -3,11 +3,36 @@ from typing import Any, Callable
 
 
 class Field:
+    """
+    Create a `Field`, which represents a 'node' in the computational graph governed
+    by an instance of `tarsiflow.Model`
 
-    def __init__(self, name: str, default_value: Any | None = None, compute: Callable | None = None):
+    :param name: the name of the field
+    :param default_value: default value for the field (defaults to `None` if not specified)
+    :param compute: a callable function with parameters named in accordance to other `Field` objects
+    :param from_task: a boolean indicating whether this field is computed from a `task` or not
+    """
+    def __init__(
+        self, 
+        name: str, 
+        compute: Callable | None = None,
+        default_value: Any | None = None, 
+        type: str = "value",
+        from_task: bool = False
+    ):
         self._name = name
         self._value = default_value
         self._compute = compute
+        self._from_task = from_task
+        self._type = type
+
+    @property
+    def sentinel(self):
+        return float("nan") if self._type == "value" else np.array([np.nan])
+
+    @property
+    def from_task(self):
+        return self._from_task
 
     @property
     def name(self):
@@ -35,10 +60,7 @@ class Field:
 
     @property
     def classification(self):
-        if isinstance(self.value, (list, np.ndarray)):
-            return "array"
-        else:
-            return "value"
+        return self._type
 
     def __repr__(self):
         if self.classification == "array":
