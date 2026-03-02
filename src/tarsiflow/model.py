@@ -1,11 +1,12 @@
 import inspect
 import asyncio
+import pprint
 import numpy as np
 from functools import wraps
 from collections import defaultdict, deque
 from typing import Any
 from .tracking import Tracking
-from .field import Field
+from .datatypes import Field, Array
 
 
 def with_model_context(func):
@@ -177,27 +178,33 @@ class Model:
         queue = deque(self._dependents[input_name])
 
         while queue:
-            field_name = queue.popleft()
-            field = self._fields[field_name]
+            output_name = queue.popleft()
+            output_field = self._fields[output_name]
 
-            if field.from_task:
-                queue.extend(self._dependents[field_name])
+            if output_field.from_task:
+                queue.extend(self._dependents[output_name])
                 continue
-
-            old_value = field.value
-
+            
+            old_value = output_field.value
             self.set(input_name, input_value)
-            new_value = field.compute(model=self)
-
+            new_value = output_field.compute(model=self)
+            
             delta_condition = False
-            if field.classification == "array":
-                delta_condition = np.sum(old_value) != np.sum(new_value)
+            if isinstance(output_field, Array):
+                delta_condition = not np.array_equal(old_value, new_value)
             else:
                 delta_condition = (new_value != old_value)
 
             if delta_condition:
-                field.value = new_value
-                delta[field_name] = new_value
-                queue.extend(self._dependents[field_name])
+                output_field.value = new_value
+                delta[output_name] = new_value
+                queue.extend(self._dependents[output_name])
 
         return delta
+    
+    def __repr__(self):
+        field_header = "---- Fields ----\n\n"
+        field_info = f"{pprint.pformat(self.fields, width=60)}"
+        dependents_header = "\n\n---- Dependency Graph ---- \n\n"
+        dependents_info = f"{pprint.pformat(dict(self.dependents), width=60)}"
+        return (field_header + field_info + dependents_header + dependents_info)
