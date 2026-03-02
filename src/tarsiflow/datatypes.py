@@ -46,7 +46,7 @@ class Float(Field):
     
     @value.setter
     def value(self, new_value: float | None):
-        self._value = float(new_value) if new_value else self.sentinel
+        self._value = float(new_value) if new_value is not None else self.sentinel
 
     def __repr__(self):
         return f"<Float {self.name}, value (float) = {self.value}>"
@@ -75,7 +75,7 @@ class Integer(Field):
     
     @value.setter
     def value(self, new_value: int | None):
-        self._value = int(new_value) if new_value else self.sentinel
+        self._value = int(new_value) if new_value is not None else self.sentinel
 
     def __repr__(self):
         return f"<Integer {self.name}, value (int) = {self.value}>"
@@ -104,7 +104,7 @@ class String(Field):
     
     @value.setter
     def value(self, new_value: str | None):
-        self._value = str(new_value) if new_value else self.sentinel
+        self._value = str(new_value) if new_value is not None else self.sentinel
 
     def __repr__(self):
         return f"<String {self.name}, value (str) = {self.value}>"

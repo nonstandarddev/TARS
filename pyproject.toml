@@ -1,6 +1,6 @@
 [project]
 name = "tarsiflow"
-version = "1.0.0"
+version = "1.0.1"
 description = "Toolkit for building reactive, dependency-tracked computational graphs in Python"
 readme = "README.md"
 requires-python = ">=3.12"

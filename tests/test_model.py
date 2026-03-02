@@ -25,5 +25,15 @@ def test_model_refresh(sample_model):
     np.testing.assert_array_equal(delta["w"], np.array([16, 20, 24]))
 
 
+def test_zero_refresh(sample_model):
+
+    delta = sample_model.refresh(
+        "a",
+        0
+    )
+
+    assert delta["x"] == 0
+
+
 if __name__ == "__main__":
     pytest.main()
