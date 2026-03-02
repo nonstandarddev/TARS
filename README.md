@@ -15,8 +15,10 @@ For example, consider the following model,
 ```python
 from tarsiflow import (
     with_model_context,
-    Model,
-    Field
+    Model
+)
+from tarsiflow.datatypes import (
+    Float
 )
 
 # Ordinary Python functions
@@ -41,11 +43,11 @@ def costly_operation():
 
 # Declaration of schema
 schema = [
-    Field("price", 100),
-    Field("quantity", 5),
-    Field("revenue", compute=compute_revenue),
-    Field("tax", compute=compute_tax),
-    Field("costly_operation", compute=costly_operation)
+    Float("price", 100),
+    Float("quantity", 5),
+    Float("revenue", compute=compute_revenue),
+    Float("tax", compute=compute_tax),
+    Float("costly_operation", compute=costly_operation)
 ]
 
 # Model setup
@@ -66,7 +68,7 @@ model.dependents
 # defaultdict(<class 'list'>, {'price': ['revenue', 'tax'], 'quantity': ['revenue'], 'rate': ['tax']})
 ```
 
-So, if I change `quantity` *only* `revenue` needs to be recalculated (and we can ignore `tax`),
+So, if we change the `quantity` field *only* `revenue` needs to be recalculated (and we can ignore `tax`),
 
 ```python
 delta = model.refresh("quantity", 10)
@@ -97,9 +99,13 @@ For example, note here the usage of `model.refresh_task()`,
 import numpy as np
 import asyncio
 from tarsiflow import (
-    Field,
     Model,
     with_model_context
+)
+from tarsiflow.datatypes import (
+    Float,
+    Integer,
+    Array
 )
 
 
@@ -142,27 +148,25 @@ async def main():
     schema = [
 
         # Inputs
-        Field("avg_severity", default_value=500_000),
-        Field("avg_n_claims", default_value=5),
-        Field("n_trials", default_value=10_000_000),
-        Field("agg_excess", default_value=1_000_000),
-        Field("agg_limit", default_value=3_000_000),
+        Float("avg_severity", default_value=500_000),
+        Integer("avg_n_claims", default_value=5),
+        Integer("n_trials", default_value=10_000_000),
+        Float("agg_excess", default_value=1_000_000),
+        Float("agg_limit", default_value=3_000_000),
 
         # Outputs
-        Field(
+        Float(
             "aal", 
             compute_aal
         ),
-        Field(
+        Array(
             "trial_losses", 
             compute_trial_losses, 
-            from_task=True,
-            type="array"
+            from_task=True
         ),
-        Field(
+        Array(
             "net_losses", 
-            compute_net_losses,
-            type="array"
+            compute_net_losses
         )
 
     ]
